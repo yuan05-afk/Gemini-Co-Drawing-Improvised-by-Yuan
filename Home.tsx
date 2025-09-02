@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import {useCallback, useEffect, useRef, useState} from 'react';
 
-const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY});
+const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
 
 function parseError(error: string) {
   const regex = /{"error":(.*)}/gm;
@@ -83,6 +83,7 @@ export default function Home() {
   );
   const [interactionState, setInteractionState] =
     useState<InteractionState | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   const updateHistory = useCallback(
     (newPrompt: string, newImageDataUrl: string) => {
@@ -210,6 +211,47 @@ export default function Home() {
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wcAAwAB/epv2AAAAABJRU5ErkJggg==';
   }, [uploadedImage, history, historyIndex, updateHistory]);
 
+  const processImageFile = useCallback(
+    (file: File | null) => {
+      if (!file) return;
+
+      flattenImage();
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const maxW = canvas.width * 0.8;
+          const maxH = canvas.height * 0.8;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxW) {
+            height *= maxW / width;
+            width = maxW;
+          }
+          if (height > maxH) {
+            width *= maxH / height;
+            height = maxH;
+          }
+
+          setUploadedImage({
+            img,
+            x: (canvas.width - width) / 2,
+            y: (canvas.height - height) / 2,
+            width,
+            height,
+            aspectRatio: img.width / img.height,
+          });
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    },
+    [flattenImage],
+  );
+
   const loadCanvasState = (imageDataUrl: string) => {
     setUploadedImage(null);
     flattenImage();
@@ -245,6 +287,29 @@ export default function Home() {
       }, 0);
     }
   }, []);
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            processImageFile(file);
+            e.preventDefault();
+            return;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+  }, [processImageFile]);
 
   const getCoordinates = (e) => {
     const canvas = canvasRef.current;
@@ -456,43 +521,30 @@ export default function Home() {
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    flattenImage();
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new window.Image();
-        img.onload = () => {
-          const canvas = canvasRef.current;
-          if (!canvas) return;
-          const maxW = canvas.width * 0.8;
-          const maxH = canvas.height * 0.8;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > maxW) {
-            height *= maxW / width;
-            width = maxW;
-          }
-          if (height > maxH) {
-            width *= maxH / height;
-            height = maxH;
-          }
-
-          setUploadedImage({
-            img,
-            x: (canvas.width - width) / 2,
-            y: (canvas.height - height) / 2,
-            width,
-            height,
-            aspectRatio: img.width / img.height,
-          });
-        };
-        img.src = event.target?.result as string;
-      };
-      reader.readAsDataURL(file);
+    processImageFile(file);
+    if (e.target) {
+      e.target.value = ''; // Reset file input
     }
-    e.target.value = null; // Reset file input
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      processImageFile(file);
+    }
   };
 
   const handleCanvasMouseDown = (e) => {
@@ -760,7 +812,14 @@ export default function Home() {
                 onTouchStart={handleCanvasMouseDown}
                 onTouchMove={handleCanvasMouseMove}
                 onTouchEnd={handleCanvasMouseUp}
-                className="border-2 border-black w-full hover:cursor-crosshair sm:h-[60vh] h-[30vh] min-h-[320px] bg-white/90 touch-none"
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-2 w-full hover:cursor-crosshair sm:h-[60vh] h-[30vh] min-h-[320px] bg-white/90 touch-none transition-all ${
+                  isDraggingOver
+                    ? 'border-blue-500 ring-4 ring-blue-300/50'
+                    : 'border-black'
+                }`}
               />
             </div>
 
