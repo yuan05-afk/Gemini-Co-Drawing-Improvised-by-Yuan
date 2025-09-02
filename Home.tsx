@@ -450,6 +450,43 @@ export default function Home() {
       const canvas = canvasRef.current;
       const drawingData = canvas.toDataURL('image/png').split(',')[1];
 
+      const styleKeywords = [
+        'style of',
+        'watercolor',
+        'photorealistic',
+        'cartoon',
+        'pixel art',
+        'impressionist',
+        'cubist',
+        'surrealist',
+        'sketch',
+        'drawing',
+        'minimalist',
+        'comic book',
+        'anime',
+        'manga',
+        '3d render',
+        'low poly',
+        'isometric',
+        'steampunk',
+        'cyberpunk',
+        'vintage',
+        'retro',
+        'painting',
+        'oil painting',
+        'acrylic',
+        'charcoal',
+      ];
+
+      const lowerCasePrompt = prompt.toLowerCase();
+      const containsStyleKeyword = styleKeywords.some((keyword) =>
+        lowerCasePrompt.includes(keyword),
+      );
+
+      const finalPrompt = containsStyleKeyword
+        ? prompt
+        : `${prompt}. Keep the same minimal line drawing style.`;
+
       const contents: Content[] = [
         {
           role: 'USER',
@@ -459,7 +496,7 @@ export default function Home() {
           role: 'USER',
           parts: [
             {
-              text: `${prompt}. Keep the same minimal line drawing style.`,
+              text: finalPrompt,
             },
           ],
         },
