@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 /* tslint:disable */
-import {Content, GoogleGenAI, Modality} from '@google/genai';
+import {GoogleGenAI, Modality} from '@google/genai';
 import {
   Check,
   ChevronDown,
@@ -30,6 +30,26 @@ function parseError(error: string) {
   } catch (e) {
     return error;
   }
+}
+
+/**
+ * Formats a string with **-style bold markdown into JSX.
+ * @param {string} text The text to format.
+ * @returns {JSX.Element | null} The formatted text as a JSX element, or null.
+ */
+function formatPrompt(text: string) {
+  if (!text) return null;
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={index}>{part.slice(2, -2)}</strong>;
+        }
+        return part;
+      })}
+    </>
+  );
 }
 
 type HistoryItem = {
@@ -440,105 +460,138 @@ export default function Home() {
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wcAAwAB/epv2AAAAABJRU5ErkJggg==';
   }, [history, historyIndex, uploadedImage]);
 
+  const updateCanvasWithImage = (imageUrl: string, promptToSave: string) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const img = new window.Image();
+    img.onload = () => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      updateHistory(promptToSave, canvas.toDataURL('image/png'));
+    };
+    img.src = imageUrl;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     flattenImage();
     if (!canvasRef.current) return;
     setIsLoading(true);
+    const canvas = canvasRef.current;
 
     try {
-      const canvas = canvasRef.current;
-      const drawingData = canvas.toDataURL('image/png').split(',')[1];
+      if (
+        selectedModel === 'gemini-2.5-flash-image-preview' ||
+        selectedModel === 'gemini-2.0-flash-preview-image-generation'
+      ) {
+        const drawingData = canvas.toDataURL('image/png').split(',')[1];
 
-      const styleKeywords = [
-        'style of',
-        'watercolor',
-        'photorealistic',
-        'cartoon',
-        'pixel art',
-        'impressionist',
-        'cubist',
-        'surrealist',
-        'sketch',
-        'drawing',
-        'minimalist',
-        'comic book',
-        'anime',
-        'manga',
-        '3d render',
-        'low poly',
-        'isometric',
-        'steampunk',
-        'cyberpunk',
-        'vintage',
-        'retro',
-        'painting',
-        'oil painting',
-        'acrylic',
-        'charcoal',
-      ];
+        const styleKeywords = [
+          'style of',
+          'watercolor',
+          'photorealistic',
+          'cartoon',
+          'pixel art',
+          'impressionist',
+          'cubist',
+          'surrealist',
+          'sketch',
+          'drawing',
+          'minimalist',
+          'comic book',
+          'anime',
+          'manga',
+          '3d render',
+          'low poly',
+          'isometric',
+          'steampunk',
+          'cyberpunk',
+          'vintage',
+          'retro',
+          'painting',
+          'oil painting',
+          'acrylic',
+          'charcoal',
+        ];
 
-      const lowerCasePrompt = prompt.toLowerCase();
-      const containsStyleKeyword = styleKeywords.some((keyword) =>
-        lowerCasePrompt.includes(keyword),
-      );
+        const lowerCasePrompt = prompt.toLowerCase();
+        const containsStyleKeyword = styleKeywords.some((keyword) =>
+          lowerCasePrompt.includes(keyword),
+        );
 
-      const finalPrompt = containsStyleKeyword
-        ? prompt
-        : `${prompt}. Keep the same minimal line drawing style.`;
+        const finalPrompt = containsStyleKeyword
+          ? prompt
+          : `${prompt}. Keep the same minimal line drawing style.`;
 
-      const contents: Content[] = [
-        {
-          role: 'USER',
-          parts: [{inlineData: {data: drawingData, mimeType: 'image/png'}}],
-        },
-        {
-          role: 'USER',
+        const contents = {
           parts: [
-            {
-              text: finalPrompt,
-            },
+            {inlineData: {data: drawingData, mimeType: 'image/png'}},
+            {text: finalPrompt},
           ],
-        },
-      ];
-
-      const response = await ai.models.generateContent({
-        model: selectedModel,
-        contents,
-        config: {
-          responseModalities: [Modality.TEXT, Modality.IMAGE],
-        },
-      });
-
-      const data = {
-        success: true,
-        message: '',
-        imageData: null,
-        error: undefined,
-      };
-
-      for (const part of response.candidates[0].content.parts) {
-        if (part.text) {
-          data.message = part.text;
-        } else if (part.inlineData) {
-          data.imageData = part.inlineData.data;
-        }
-      }
-
-      if (data.success && data.imageData) {
-        const imageUrl = `data:image/png;base64,${data.imageData}`;
-        const img = new window.Image();
-        img.onload = () => {
-          const ctx = canvas.getContext('2d');
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          updateHistory(prompt, canvas.toDataURL('image/png'));
         };
-        img.src = imageUrl;
-      } else {
-        console.error('Failed to generate image:', data.error);
-        alert('Failed to generate image. Please try again.');
+
+        const response = await ai.models.generateContent({
+          model: selectedModel,
+          contents,
+          config: {
+            responseModalities: [Modality.TEXT, Modality.IMAGE],
+          },
+        });
+
+        const data = {
+          success: true,
+          message: '',
+          imageData: null,
+          error: undefined,
+        };
+
+        for (const part of response.candidates[0].content.parts) {
+          if (part.text) {
+            data.message = part.text;
+          } else if (part.inlineData) {
+            data.imageData = part.inlineData.data;
+          }
+        }
+
+        if (data.imageData) {
+          const imageUrl = `data:image/png;base64,${data.imageData}`;
+          updateCanvasWithImage(imageUrl, prompt);
+        } else {
+          console.error('Failed to generate image:', data.error);
+          alert('Failed to generate image. Please try again.');
+        }
+      } else if (selectedModel === 'imagen-4.0-generate-001') {
+        const response = await ai.models.generateImages({
+          model: selectedModel,
+          prompt: prompt,
+          config: {
+            numberOfImages: 1,
+            outputMimeType: 'image/png',
+            aspectRatio: '16:9',
+          },
+        });
+        const base64ImageBytes: string =
+          response.generatedImages[0].image.imageBytes;
+        const imageUrl = `data:image/png;base64,${base64ImageBytes}`;
+        updateCanvasWithImage(imageUrl, prompt);
+      } else if (selectedModel === 'gemini-2.5-flash') {
+        const drawingData = canvas.toDataURL('image/png').split(',')[1];
+        const contents = {
+          parts: [
+            {inlineData: {data: drawingData, mimeType: 'image/png'}},
+            {text: `Describe this image. ${prompt}`},
+          ],
+        };
+        const response = await ai.models.generateContent({
+          model: selectedModel,
+          contents,
+        });
+        const description = response.text;
+        updateHistory(description, canvas.toDataURL('image/png'));
+        setPrompt('');
       }
     } catch (error) {
       console.error('Error submitting drawing:', error);
@@ -725,7 +778,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-2 sm:mb-6 gap-2">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold mb-0 leading-tight font-mega">
-                  Gemini Co-Drawing Modified by Yuan
+                  Gemini Co-Drawing
                 </h1>
                 <p className="text-sm sm:text-base text-gray-500 mt-1">
                   Built with{' '}
@@ -765,7 +818,16 @@ export default function Home() {
                     className="h-10 rounded-full bg-white pl-3 pr-8 text-sm text-gray-700 shadow-sm transition-all hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 appearance-none border-2 border-white"
                     aria-label="Select Gemini Model">
                     <option value="gemini-2.5-flash-image-preview">
-                      2.5 Flash
+                      2.5 Flash (Edit)
+                    </option>
+                    <option value="gemini-2.0-flash-preview-image-generation">
+                      2.0 Flash (Edit)
+                    </option>
+                    <option value="imagen-4.0-generate-001">
+                      Imagen 4 (Generate)
+                    </option>
+                    <option value="gemini-2.5-flash">
+                      2.5 Flash (Describe)
                     </option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
@@ -910,8 +972,8 @@ export default function Home() {
                       className="w-24 h-14 object-cover rounded border border-gray-300 flex-shrink-0 mt-1"
                     />
                     <div className="flex-grow">
-                      <p className="text-sm font-semibold text-gray-800 break-words">
-                        {item.prompt}
+                      <p className="text-sm font-semibold text-gray-800 break-words whitespace-pre-wrap">
+                        {formatPrompt(item.prompt)}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         {item.timestamp.toLocaleTimeString()}
