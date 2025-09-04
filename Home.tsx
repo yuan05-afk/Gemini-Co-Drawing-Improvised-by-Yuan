@@ -778,7 +778,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-2 sm:mb-6 gap-2">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold mb-0 leading-tight font-mega">
-                  Gemini Co-Drawing
+                  Gemini Co-Drawing Modified by Yuan
                 </h1>
                 <p className="text-sm sm:text-base text-gray-500 mt-1">
                   Built with{' '}
